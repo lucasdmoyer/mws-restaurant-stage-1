@@ -8,15 +8,15 @@ class DBHelper {
    * Change this to restaurants.json file location on your server.
    */
   static get DATABASE_URL() {
-    const port = 8000 // Change this to your server port
-    return `http://localhost:${port}/data/restaurants.json`;
+    const port = 1337 // Change this to your server port
+    return `http://localhost:${port}/restaurants`;
   }
 
   /**
    * Fetch all restaurants.
    */
   static fetchRestaurants(callback) {
-    let xhr = new XMLHttpRequest();
+    /*let xhr = new XMLHttpRequest();
     xhr.open('GET', DBHelper.DATABASE_URL);
     xhr.onload = () => {
       if (xhr.status === 200) { // Got a success response from server!
@@ -28,26 +28,46 @@ class DBHelper {
         callback(error, null);
       }
     };
-    xhr.send();
-  }
+    xhr.send();*/
+    
+    fetch(DBHelper.DATABASE_URL)
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(response) {
+        const restaurants = response;
+        callback(null, restaurants);
+      });
+    }
 
   /**
    * Fetch a restaurant by its ID.
    */
   static fetchRestaurantById(id, callback) {
     // fetch all restaurants with proper error handling.
+    
     DBHelper.fetchRestaurants((error, restaurants) => {
       if (error) {
         callback(error, null);
       } else {
         const restaurant = restaurants.find(r => r.id == id);
         if (restaurant) { // Got the restaurant
+          console.log(restaurant)
           callback(null, restaurant);
         } else { // Restaurant does not exist in the database
           callback('Restaurant does not exist', null);
         }
       }
     });
+    
+  
+    /*
+  fetch(DBHelper.DATABASE_URL + `/${id}`).then(response => response.json()).then(response =>{
+    const restaurants = response;
+    console.log(response)
+    callback(null, restaurants);
+  })
+  */
   }
 
   /**
