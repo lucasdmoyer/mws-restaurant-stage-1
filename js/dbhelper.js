@@ -1,6 +1,11 @@
+
 /**
  * Common database helper functions.
  */
+const dbPromise = idb.open('keyval-store', 1, upgradeDB => {
+  upgradeDB.createObjectStore('keyval');
+});
+
 class DBHelper {
 
   /**
@@ -16,26 +21,20 @@ class DBHelper {
    * Fetch all restaurants.
    */
   static fetchRestaurants(callback) {
-    /*let xhr = new XMLHttpRequest();
-    xhr.open('GET', DBHelper.DATABASE_URL);
-    xhr.onload = () => {
-      if (xhr.status === 200) { // Got a success response from server!
-        const json = JSON.parse(xhr.responseText);
-        const restaurants = json.restaurants;
-        callback(null, restaurants);
-      } else { // Oops!. Got an error from server.
-        const error = (`Request failed. Returned status of ${xhr.status}`);
-        callback(error, null);
-      }
-    };
-    xhr.send();*/
-    
     fetch(DBHelper.DATABASE_URL)
       .then(function(response) {
         return response.json();
       })
       .then(function(response) {
         const restaurants = response;
+        restaurants.forEach(function(restaurant) {
+          dbPromise.then(db => {
+            const tx = db.transaction('keyval', 'readwrite');
+            var keyValStore = tx.objectStore('keyval');
+            keyValStore.put(restaurant, restaurant.id);
+            return tx.complete;
+          });
+        });
         callback(null, restaurants);
       });
     }
@@ -45,29 +44,11 @@ class DBHelper {
    */
   static fetchRestaurantById(id, callback) {
     // fetch all restaurants with proper error handling.
-    
-    DBHelper.fetchRestaurants((error, restaurants) => {
-      if (error) {
-        callback(error, null);
-      } else {
-        const restaurant = restaurants.find(r => r.id == id);
-        if (restaurant) { // Got the restaurant
-          console.log(restaurant)
-          callback(null, restaurant);
-        } else { // Restaurant does not exist in the database
-          callback('Restaurant does not exist', null);
-        }
-      }
-    });
-    
-  
-    /*
   fetch(DBHelper.DATABASE_URL + `/${id}`).then(response => response.json()).then(response =>{
     const restaurants = response;
-    console.log(response)
     callback(null, restaurants);
   })
-  */
+  
   }
 
   /**
@@ -170,7 +151,7 @@ class DBHelper {
    * Restaurant image URL.
    */
   static imageUrlForRestaurant(restaurant) {
-    return (`/img/${restaurant.photograph}`);
+    return (`/img/${restaurant.photograph}.jpg`);
   }
 
   /**
