@@ -1,4 +1,3 @@
-
 let restaurants,
   neighborhoods,
   cuisines
@@ -17,7 +16,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
 /**
  * Fetch all neighborhoods and set their HTML.
  */
-fetchNeighborhoods = () => {
+const fetchNeighborhoods = () => {
   DBHelper.fetchNeighborhoods((error, neighborhoods) => {
     if (error) { // Got an error
       console.error(error);
@@ -31,7 +30,7 @@ fetchNeighborhoods = () => {
 /**
  * Set neighborhoods HTML.
  */
-fillNeighborhoodsHTML = (neighborhoods = self.neighborhoods) => {
+const fillNeighborhoodsHTML = (neighborhoods = self.neighborhoods) => {
   const select = document.getElementById('neighborhoods-select');
   neighborhoods.forEach(neighborhood => {
     const option = document.createElement('option');
@@ -44,7 +43,7 @@ fillNeighborhoodsHTML = (neighborhoods = self.neighborhoods) => {
 /**
  * Fetch all cuisines and set their HTML.
  */
-fetchCuisines = () => {
+const fetchCuisines = () => {
   DBHelper.fetchCuisines((error, cuisines) => {
     if (error) { // Got an error!
       console.error(error);
@@ -58,7 +57,7 @@ fetchCuisines = () => {
 /**
  * Set cuisines HTML.
  */
-fillCuisinesHTML = (cuisines = self.cuisines) => {
+const fillCuisinesHTML = (cuisines = self.cuisines) => {
   const select = document.getElementById('cuisines-select');
 
   cuisines.forEach(cuisine => {
@@ -72,14 +71,14 @@ fillCuisinesHTML = (cuisines = self.cuisines) => {
 /**
  * Initialize leaflet map, called from HTML.
  */
-initMap = () => {
+const initMap = () => {
   self.newMap = L.map('map', {
         center: [40.722216, -73.987501],
         zoom: 12,
         scrollWheelZoom: false
       });
   L.tileLayer('https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.jpg70?access_token={mapboxToken}', {
-    mapboxToken: 'sk.eyJ1IjoibHVjYXNkbW95ZXIiLCJhIjoiY2ptMm1hd25hMDVocDNwbW11ZGloNGt3dCJ9.KVe3X3clJaQ0F0WcpSl20A',
+    mapboxToken: 'pk.eyJ1IjoidGhlZ3JlYXRkZWJhdGUiLCJhIjoiY2pqeHhjY2V4YWh4ZDNxbGZtMXAxdndmdSJ9.buoZhVfjmQ4MLiAk0B4vaA',
     maxZoom: 18,
     attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, ' +
       '<a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, ' +
@@ -105,7 +104,7 @@ initMap = () => {
 /**
  * Update page and map for current restaurants.
  */
-updateRestaurants = () => {
+const updateRestaurants = () => {
   const cSelect = document.getElementById('cuisines-select');
   const nSelect = document.getElementById('neighborhoods-select');
 
@@ -128,7 +127,7 @@ updateRestaurants = () => {
 /**
  * Clear current restaurants, their HTML and remove their map markers.
  */
-resetRestaurants = (restaurants) => {
+const resetRestaurants = (restaurants) => {
   // Remove all restaurants
   self.restaurants = [];
   const ul = document.getElementById('restaurants-list');
@@ -145,7 +144,7 @@ resetRestaurants = (restaurants) => {
 /**
  * Create all restaurants HTML and add them to the webpage.
  */
-fillRestaurantsHTML = (restaurants = self.restaurants) => {
+const fillRestaurantsHTML = (restaurants = self.restaurants) => {
   const ul = document.getElementById('restaurants-list');
   restaurants.forEach(restaurant => {
     ul.append(createRestaurantHTML(restaurant));
@@ -156,18 +155,35 @@ fillRestaurantsHTML = (restaurants = self.restaurants) => {
 /**
  * Create restaurant HTML.
  */
-createRestaurantHTML = (restaurant) => {
+const createRestaurantHTML = (restaurant) => {
   const li = document.createElement('li');
 
+  //changes for img section inspired by Project 1 MWS
   const image = document.createElement('img');
   image.className = 'restaurant-img';
-  image.src = DBHelper.imageUrlForRestaurant(restaurant);
-  image.setAttribute = ('alt', restaurant.name);
+  const img = DBHelper.imageUrlForRestaurant(restaurant);
+  var imgArr = img.split('.')
+  var img2x = imgArr[0] + '-800_2x.' + imgArr[1];
+  var img1x = imgArr[0] + '-400_1x.' + imgArr[1];
+  image.src = img1x;
+  image.srcset = `${img2x} 2x, ${img1x} 1x`
+  image.alt = restaurant.name;
   li.append(image);
 
-  const name = document.createElement('h1');
+  const name = document.createElement('h3');
   name.innerHTML = restaurant.name;
   li.append(name);
+
+  const favoriteIcon = document.createElement('div');
+  const isFavorite = (restaurant["is_favorite"] && restaurant["is_favorite"].toString() === "true") ? true : false;
+  favoriteIcon.className = 'fav-icon';
+  const favorite = document.createElement('button');
+  favorite.style.background = isFavorite ? `url("/img/like.svg") no-repeat`
+    : `url("/img/not-like.svg") no-repeat`;
+  favorite.id = `fav-icon-${restaurant.id}`;
+  favorite.onclick = event => handleFavClick(restaurant.id, !isFavorite);
+  favoriteIcon.append(favorite);
+  li.append(favoriteIcon);
 
   const neighborhood = document.createElement('p');
   neighborhood.innerHTML = restaurant.neighborhood;
@@ -177,18 +193,36 @@ createRestaurantHTML = (restaurant) => {
   address.innerHTML = restaurant.address;
   li.append(address);
 
-  const more = document.createElement('a');
-  more.innerHTML = 'View Details';
-  more.href = DBHelper.urlForRestaurant(restaurant);
+  const more = document.createElement('button');
+  more.innerHTML = 'Restaurant Details';
+  more.onclick = function() {
+    window.location.href = DBHelper.urlForRestaurant(restaurant);
+  };
+  //more.href = DBHelper.urlForRestaurant(restaurant);
   li.append(more)
 
   return li
 }
 
+const handleFavClick = (id, favStatus) => {
+  const fav = document.getElementById(`fav-icon-${id}`);
+  console.log(`onclick info: ${self.restaurants[id]}`);
+  let restaurant = self.restaurants[id-1];
+  restaurant["is_favorite"] = favStatus;
+  if(!favStatus) {
+    fav.setAttribute('aria-label', `${restaurant.name} not favorite`);
+    fav.style.background = `url(/img/not-like.svg) no-repeat`;
+  } else {
+    fav.setAttribute('aria-label', `${restaurant.name} favorite`);
+    fav.style.background = `url(/img/like.svg) no-repeat`;
+  }
+  fav.onclick = event => handleFavClick(id, !favStatus);
+}
+
 /**
  * Add markers for current restaurants to the map.
  */
-addMarkersToMap = (restaurants = self.restaurants) => {
+const addMarkersToMap = (restaurants = self.restaurants) => {
   restaurants.forEach(restaurant => {
     // Add marker to the map
     const marker = DBHelper.mapMarkerForRestaurant(restaurant, self.newMap);
@@ -198,8 +232,8 @@ addMarkersToMap = (restaurants = self.restaurants) => {
     }
     self.markers.push(marker);
   });
+}
 
-} 
 /* addMarkersToMap = (restaurants = self.restaurants) => {
   restaurants.forEach(restaurant => {
     // Add marker to the map

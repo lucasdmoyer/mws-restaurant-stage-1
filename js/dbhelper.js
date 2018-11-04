@@ -1,11 +1,22 @@
+const database = 'restaurant-db';
+const review_store = 'reviews';
+const storename = 'restaurants';
+const dbPromise = idb.open(database, 1, upgradeDb => {
+  switch (upgradeDb.oldVersion) {
+    case 0:
+      upgradeDb.createObjectStore(storename, {keypath: 'id'});
+      let keyValStore = upgradeDb.createObjectStore(review_store, { keypath: 'id' });
+      keyValStore.createIndex('restaurant_id', 'restaurant_id');
+  }
+});
+
+let connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+let networkStatus = true;
+
 
 /**
  * Common database helper functions.
  */
-const dbPromise = idb.open('keyval-store', 1, upgradeDB => {
-  upgradeDB.createObjectStore('keyval');
-});
-
 class DBHelper {
 
   /**
@@ -17,44 +28,72 @@ class DBHelper {
     return `http://localhost:${port}/restaurants`;
   }
 
+  static get DATABASE_URL_REVIEWS() {
+    const port = 1337
+    return `http://localhost:${port}/reviews/`;
+  }
+  
   /**
    * Fetch all restaurants.
    */
-  static fetchRestaurants(callback) {
-    fetch(DBHelper.DATABASE_URL)
-      .then(function(response) {
-        return response.json();
-      })
-      .then(function(response) {
-        const restaurants = response;
-        restaurants.forEach(function(restaurant) {
-          dbPromise.then(db => {
-            const tx = db.transaction('keyval', 'readwrite');
-            var keyValStore = tx.objectStore('keyval');
-            keyValStore.put(restaurant, restaurant.id);
-            return tx.complete;
-          });
-        });
+  static fetchRestaurants(callback, id) {
+    /* let xhr = new XMLHttpRequest();
+    xhr.open('GET', DBHelper.DATABASE_URL);
+    xhr.onload = () => {
+      if (xhr.status === 200) { // Got a success response from server!
+        const json = JSON.parse(xhr.responseText);
+        const restaurants = json.restaurants;
         callback(null, restaurants);
-      });
+      } else { // Oops!. Got an error from server.
+        const error = (`Request failed. Returned status of ${xhr.status}`);
+        callback(error, null);
+      }
+    };
+    xhr.send(); 
+    */
+    let fetchURL = DBHelper.DATABASE_URL;
+
+    if (!id) {
+      fetchURL = DBHelper.DATABASE_URL;
+    } else {
+      fetchURL = DBHelper.DATABASE_URL + '/' + id;
     }
+
+      fetch(fetchURL).then(response => {
+      response.json().then(restaurants => {
+      console.log("restaurants JSON: ", restaurants); // added from Project supplied webinar to troubleshoot 10th image not displaying
+      callback(null, restaurants);
+      });
+    }).catch(err => {
+    const error = (`Request failed. Returned ${err}`);
+    callback(error, null);
+  });
+}
 
   /**
    * Fetch a restaurant by its ID.
    */
   static fetchRestaurantById(id, callback) {
     // fetch all restaurants with proper error handling.
-  fetch(DBHelper.DATABASE_URL + `/${id}`).then(response => response.json()).then(response =>{
-    const restaurants = response;
-    callback(null, restaurants);
-  })
-  
+    DBHelper.fetchRestaurants((error, restaurants) => {
+      if (error) {
+        console.log(`callback type: ${typeof callback}`);
+        callback(error, null);
+      } else {
+        const restaurant = restaurants.find(r => r.id == id);
+        if (restaurant) { // Got the restaurant
+          callback(null, restaurant);
+        } else { // Restaurant does not exist in the database
+          callback('Restaurant does not exist', null);
+        }
+      }
+    });
   }
 
   /**
    * Fetch restaurants by a cuisine type with proper error handling.
    */
-  static fetchRestaurantByCuisine(cuisine, callback) {
+  static fetchRestaurantByCuisine(callback, cuisine) {
     // Fetch all restaurants  with proper error handling
     DBHelper.fetchRestaurants((error, restaurants) => {
       if (error) {
@@ -70,7 +109,7 @@ class DBHelper {
   /**
    * Fetch restaurants by a neighborhood with proper error handling.
    */
-  static fetchRestaurantByNeighborhood(neighborhood, callback) {
+  static fetchRestaurantByNeighborhood(callback, neighborhood) {
     // Fetch all restaurants
     DBHelper.fetchRestaurants((error, restaurants) => {
       if (error) {
@@ -90,6 +129,7 @@ class DBHelper {
     // Fetch all restaurants
     DBHelper.fetchRestaurants((error, restaurants) => {
       if (error) {
+        //console.log(typeof callback);
         callback(error, null);
       } else {
         let results = restaurants
@@ -149,9 +189,11 @@ class DBHelper {
 
   /**
    * Restaurant image URL.
+   * Change needed for Rest Server as extension is no longer supplied
    */
   static imageUrlForRestaurant(restaurant) {
-    return (`/img/${restaurant.photograph}.jpg`);
+    //change due to database not having photograph value for every entry
+    return (`/img/${restaurant.id}.jpg`);
   }
 
   /**
@@ -178,5 +220,152 @@ class DBHelper {
     return marker;
   } */
 
+  /**
+   * 
+   */
+  static checkConnection(){
+    return (networkStatus === true) ?true :false;
+  }
+
+  static networkReconnectAddReview(){
+    dbPromise.then(db => {
+      return db.transaction(review_store)
+      .objectStore(review_store).getAll();
+    }).then(results => {
+      let reviews = results.filter(result => result.offlineFlag == true);
+      reviews.forEach(review => {
+      delete review.offlineFlag;
+        DBHelper.saveNewReview(review, (error, result) =>{
+          if(error){
+            callback(error, null);
+            return;
+          }
+          callback(null, result);
+        });
+      })
+    }).catch(err => {
+      callback(err,null);
+    })
+  }
+
+  /**
+   * 
+   */
+  static networkReconnect(){
+    DBHelper.networkReconnectAddReview();
+  }
+
+  /**
+   * 
+   */
+  static updateConnectionStatus() {
+    if(!navigator.onLine){
+      networkStatus = false;
+      console.log(`Connection has been lost: ${networkStatus}`);
+    } else {
+      networkStatus = true;
+      console.log(`Connection reestablished: ${networkStatus}`);
+      //check for pending updates need more code under here
+      DBHelper.networkReconnect();
+    }
+  }
+
+  /**
+   * Add new and Update old review
+   */
+  static addUpdateReviewIDB(review) {
+    dbPromise.then(db => {
+      console.log('adding review to idb cache');
+      const tx = db.transaction(review_store, 'readwrite');
+      const store = tx.objectStore(review_store);
+      store.put(review, review.id)
+      return tx.complete;
+    }).then(function() {
+      console.log(`successfully added ${review} `)
+    }).catch(error=> {
+      console.log(`Error adding review to idb cache: ${error}`);
+    })
+  }
+
+  /**
+   * 
+   */
+  static saveNewReview(review, callback){
+    const reviewURL = DBHelper.DATABASE_URL_REVIEWS;
+    fetch(reviewURL, {
+      method: 'post',
+      body: JSON.stringify(review)
+    }).then(response => {
+      response.json().then(results => {
+        //call to function to add or update db
+        DBHelper.addUpdateReviewIDB(results);
+        callback(null,results);
+      });
+    }).catch(err => {
+      const error = `Submission to server failed: ${err}`;
+      callback(error,null);
+    })
+  }
+
+  /**
+   * Save Review 
+   */
+  static saveReview(id, name, rating, comment,callback) {
+    const review = {
+      restaurant_id: id,
+      name: name,
+      rating: rating,
+      comments: comment,
+      createdAt: Date.now()
+    }
+    //if connection submit to server else post in idb with flag set for offline
+    //DBHelper.checkConnection();
+    if(networkStatus == false){
+      //add flag for offline
+      const tempId = new Date().getTime();
+      review.id = tempId;
+      review.offlineFlag = true;
+      //add review to idb
+      DBHelper.addUpdateReviewIDB(review);
+      return;
+    }
+    DBHelper.saveNewReview(review, (error, result) => {
+      if(error){
+        callback(error, null);
+        return;
+      }
+      callback(null, result);
+    });
+  }
+  /**
+   * Fetch reviews by id for resource management
+   */
+  static fetchReviewByRestaurantId(id, callback){
+      const reviewURL = `${DBHelper.DATABASE_URL_REVIEWS}?restaurant_id=${id}`;
+      console.log(reviewURL);
+      fetch(reviewURL).then(response => {
+        response.json().then(reviews => {
+          /*if(!reviews){
+            callback(error,null);
+          } else{
+            //deal with reviews that are found...add to idb
+            reviews.forEach(review => {
+              DBHelper.addUpdateReviewIDB(review);
+            });  
+          } */
+          callback(null, reviews);
+        }).catch(err => {
+          console.log(`Review request failed: Returned ${err}`);
+          /* dbPromise.then(db => {
+            return db.transaction(review_store).objectStore(review_store)
+            .index('restaurant_id').getAll(id);
+          }).then(reviews => {
+            callback(null,reviews);
+          }) */
+        })
+      });
+  }
 }
+//add event listener for connection change from mozilla.org
+connection.addEventListener('change', DBHelper.updateConnectionStatus);
 
