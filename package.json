@@ -4,7 +4,8 @@
   "description": "---\r #### _Three Stage Course Material Project - Restaurant Reviews_",
   "main": "index.html",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "babel ES6 -d ES5"
   },
   "repository": {
     "type": "git",
@@ -21,6 +22,8 @@
     "idb-keyval": "^3.1.0"
   },
   "devDependencies": {
+    "@babel/preset-es2015": "^7.0.0-beta.53",
+    "babel-cli": "^6.26.0",
     "gulp": "^3.9.1",
     "idb": "^2.1.3",
     "webpack": "^4.20.2",

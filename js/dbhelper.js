@@ -2,8 +2,9 @@
 /**
  * Common database helper functions.
  */
-const dbPromise = idb.open('keyval-store', 1, upgradeDB => {
+const dbPromise = idb.open('keyval-store', 3, upgradeDB => {
   upgradeDB.createObjectStore('keyval');
+  upgradeDB.createObjectStore('reviewskeyval');
 });
 
 class DBHelper {
@@ -49,6 +50,39 @@ class DBHelper {
     callback(null, restaurants);
   })
   
+  }
+
+  // in src/js/dbhelper.js inside the DBHelper class
+  static fetchReviewsByRestaurantId(restaurant_id) {
+    return fetch(`http://localhost:1337/reviews/?restaurant_id=${restaurant_id}`).then(response => {
+      if (!response.ok) return Promise.reject("Reviews couldn't be fetched from network");
+      return response.json();
+    }).then(fetchedReviews => {
+      // if reviews could be fetched from network:
+      // TODO: store reviews on idb
+      fetchedReviews.forEach(function(review) {
+        dbPromise.then(db => {
+          const tx = db.transaction('reviewskeyval', 'readwrite');
+          var keyValStore = tx.objectStore('reviewskeyval');
+          keyValStore.put(review, review.id);
+          return tx.complete;
+        });
+      });
+      return fetchedReviews;
+    }).catch(networkError => {
+      // if reviews couldn't be fetched from network:
+      // TODO: try to get reviews from idb
+      fetchedReviews.forEach(function(review) {
+        dbPromise.then(db => {
+          const tx = db.transaction('reviewskeyval', 'readwrite');
+          var keyValStore = tx.objectStore('reviewskeyval');
+          keyValStore.get(review.id);
+          return tx.complete;
+        });
+      });
+      console.log(`${networkError}`);
+      return null; // return null to handle error, as though there are no reviews.
+    });
   }
 
   /**
